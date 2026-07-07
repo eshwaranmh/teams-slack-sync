@@ -1,0 +1,9 @@
+# never commit secrets
+*.env
+.env*
+*token*
+
+# os / editor noise
+.DS_Store
+node_modules/
+*.log
