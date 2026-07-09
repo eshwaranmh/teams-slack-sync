@@ -20,6 +20,14 @@ module.exports = {
   // Clear status if the extension stops heartbeating for this long.
   staleAfterMs: parseInt(process.env.STALE_AFTER_MS || '60000', 10),
 
+  // Detect calls in the standalone Teams desktop app via its local
+  // third-party app API (Teams → Settings → Privacy). Disable with:
+  //   export TEAMS_DESKTOP_ENABLED=false
+  teamsDesktopEnabled: (process.env.TEAMS_DESKTOP_ENABLED || 'true') !== 'false',
+
+  // Port of the Teams desktop app's local WebSocket API.
+  teamsApiPort: parseInt(process.env.TEAMS_API_PORT || '8124', 10),
+
   // Slack status expiration window, refreshed on heartbeats during a call.
   expirationWindowMs: parseInt(process.env.EXPIRATION_WINDOW_MS || '120000', 10),
 };

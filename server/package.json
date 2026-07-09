@@ -1,13 +1,13 @@
 {
   "name": "teams-slack-sync-server",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "Local server that syncs Slack status from Teams web meeting state",
+  "description": "Local server that syncs Slack status from Teams (web and desktop app) meeting state",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

@@ -2,7 +2,7 @@
 # setup.sh — one-command installer for teams-slack-sync (macOS)
 #
 # What it does:
-#   1. Checks Node.js >= 18
+#   1. Checks Node.js >= 22
 #   2. Asks for your Slack user token (input hidden, validated live)
 #   3. Saves it to ~/.teams-slack-sync.env (chmod 600)
 #   4. Installs a launchd agent so the server starts on every login/reboot
@@ -32,8 +32,8 @@ if ! command -v node >/dev/null 2>&1; then
   fail "Node.js not found. Install it first:  brew install node"
 fi
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-if (( NODE_MAJOR < 18 )); then
-  fail "Node.js >= 18 required (you have $(node -v))."
+if (( NODE_MAJOR < 22 )); then
+  fail "Node.js >= 22 required (you have $(node -v)). Upgrade:  brew upgrade node"
 fi
 ok "Node $(node -v) found"
 
@@ -127,11 +127,18 @@ for i in {1..10}; do
 done
 
 # --- 5. Next steps -------------------------------------------------------------
-bold "\n=== Almost done — load the Chrome extension ===\n"
-print "  1. Open chrome://extensions"
+bold "\n=== Almost done — connect your Teams client(s) ===\n"
+print "Teams DESKTOP app (standalone Teams):"
+print "  1. Teams → Settings → Privacy → Third-party app API → Manage API → enable"
+print "  2. Join any meeting (Calendar → Meet now is fine)"
+print "  3. Approve the 'TeamsSlackSync wants to connect' prompt in Teams (one time)"
+print ""
+print "Teams in a BROWSER (Chrome / Edge / Brave):"
+print "  1. Open chrome://extensions (or edge://extensions, brave://extensions)"
 print "  2. Enable Developer mode (top-right)"
 print "  3. Load unpacked → select:  $REPO_DIR/extension"
 print "  4. Reload your Teams tab (https://teams.cloud.microsoft/)"
+print "  (Firefox and Safari: see README for their install steps.)"
 print ""
 print "Test: join a 'Meet now' meeting — your Slack status should flip to"
 print "'In a Teams call' within ~20s, and clear when you leave."

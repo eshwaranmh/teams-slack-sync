@@ -3,6 +3,9 @@
 .env*
 *token*
 
+# build output (firefox zip, safari xcode project)
+dist/
+
 # os / editor noise
 .DS_Store
 node_modules/
