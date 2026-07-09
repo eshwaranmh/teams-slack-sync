@@ -62,7 +62,7 @@ function start(onState) {
       manufacturer: 'TeamsSlackSync',
       device: 'TeamsSlackSync',
       app: 'TeamsSlackSync',
-      'app-version': '1.2.0',
+      'app-version': '2.0.0',
     });
     const token = loadToken();
     if (token) params.set('token', token);
