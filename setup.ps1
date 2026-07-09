@@ -4,9 +4,11 @@
 #   1. Checks Node.js >= 22
 #   2. Asks for your Slack user token (input hidden, validated live)
 #   3. Saves it to %USERPROFILE%\.teams-slack-sync.env (owner-only ACL)
-#   4. Registers a logon Scheduled Task so the server starts on every login
+#   4. Asks where you use Teams (desktop app / browser / both) and which
+#      browser(s), then tailors the remaining steps to your answers
+#   5. Registers a logon Scheduled Task so the server starts on every login
 #      and restarts automatically if it crashes
-#   5. Verifies the server is up
+#   6. Verifies the server is up
 #
 # Usage (from the repo root):
 #   powershell -ExecutionPolicy Bypass -File .\setup.ps1
@@ -80,7 +82,48 @@ if ($needToken) {
     Ok "Token saved to $EnvFile (owner-only)"
 }
 
-# --- 3. Scheduled Task (auto-start on login, keepalive) -----------------------
+# --- 3. Where do you use Teams? ------------------------------------------------
+Write-Host ''
+Write-Host 'Where do you use Microsoft Teams?' -ForegroundColor Cyan
+Write-Host '  1) Both - desktop app AND in a browser (recommended)'
+Write-Host '  2) Browser (web) only'
+Write-Host '  3) Desktop app only'
+$modeChoice = Read-Host 'Choose [1-3, default 1]'
+$Mode = switch ($modeChoice) {
+    '2' { 'web' }
+    '3' { 'desktop' }
+    default { 'both' }
+}
+
+# Persist the choice, preserving the token and any other customizations.
+$desktopEnabled = if ($Mode -eq 'web') { 'false' } else { 'true' }
+$envLines = @(Get-Content $EnvFile) | Where-Object { $_ -notmatch '^(export\s+)?TEAMS_DESKTOP_ENABLED=' }
+$envLines += "TEAMS_DESKTOP_ENABLED=$desktopEnabled"
+Set-Content -Path $EnvFile -Value $envLines -Encoding ASCII
+Ok "Mode: $Mode (saved to $EnvFile)"
+
+# --- 4. Which browser(s)? --------------------------------------------------------
+$Browsers = @()
+if ($Mode -ne 'desktop') {
+    Write-Host ''
+    Write-Host 'Which browser(s) do you use Teams in?' -ForegroundColor Cyan
+    Write-Host '  1) Chrome   2) Edge   3) Brave   4) Firefox'
+    $brChoice = Read-Host 'Select one or more, comma-separated [default 1]'
+    if (-not $brChoice) { $brChoice = '1' }
+    foreach ($n in $brChoice -split ',') {
+        switch ($n.Trim()) {
+            '1' { $Browsers += 'chrome' }
+            '2' { $Browsers += 'edge' }
+            '3' { $Browsers += 'brave' }
+            '4' { $Browsers += 'firefox' }
+            default { Warn "Ignoring unknown choice: $n" }
+        }
+    }
+    if ($Browsers.Count -eq 0) { $Browsers = @('chrome') }
+    Ok "Browser(s): $($Browsers -join ', ')"
+}
+
+# --- 5. Scheduled Task (auto-start on login, keepalive) -----------------------
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 $startScript = Join-Path $RepoDir 'start-server.ps1'
@@ -101,7 +144,7 @@ Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-ScheduledTask -TaskName $TaskName
 
-# --- 4. Verify ----------------------------------------------------------------
+# --- 6. Verify ----------------------------------------------------------------
 Write-Host 'Waiting for server' -NoNewline
 $up = $false
 foreach ($i in 1..10) {
@@ -119,20 +162,48 @@ if ($up) {
     Fail "Server didn't come up. Check $LogDir\server.log and $LogDir\server.err"
 }
 
-# --- 5. Next steps -------------------------------------------------------------
-Write-Host "`n=== Almost done — connect your Teams client(s) ===`n" -ForegroundColor Cyan
-Write-Host 'Teams DESKTOP app (standalone Teams):'
-Write-Host '  1. Teams -> Settings -> Privacy -> Third-party app API -> Manage API -> enable'
-Write-Host '  2. Join any meeting (Calendar -> Meet now is fine)'
-Write-Host "  3. Approve the 'TeamsSlackSync wants to connect' prompt in Teams (one time)"
-Write-Host ''
-Write-Host 'Teams in a BROWSER (Chrome / Edge / Brave):'
-Write-Host '  1. Open chrome://extensions (or edge://extensions, brave://extensions)'
-Write-Host '  2. Enable Developer mode'
-Write-Host "  3. Load unpacked -> select:  $RepoDir\extension"
-Write-Host '  4. Reload your Teams tab (https://teams.cloud.microsoft/)'
-Write-Host '  (Firefox: see README for its install steps.)'
-Write-Host ''
+# --- 7. Next steps (tailored to your answers) -------------------------------------
+if ($Mode -ne 'web') {
+    Write-Host "`n=== Teams DESKTOP app — one-time pairing ===`n" -ForegroundColor Cyan
+    Write-Host '  1. Teams -> Settings -> Privacy -> Third-party app API -> Manage API -> enable'
+    Write-Host '  2. Join any meeting (Calendar -> Meet now is fine)'
+    Write-Host "  3. Approve the 'TeamsSlackSync wants to connect' prompt in Teams (one time)"
+    Write-Host ''
+}
+
+$chromium = $Browsers | Where-Object { $_ -in 'chrome', 'edge', 'brave' }
+if ($chromium) {
+    Write-Host "`n=== Load the extension (Chromium browsers) ===`n" -ForegroundColor Cyan
+    if ('chrome' -in $Browsers) { Write-Host '  Chrome:  open chrome://extensions' }
+    if ('edge'   -in $Browsers) { Write-Host '  Edge:    open edge://extensions' }
+    if ('brave'  -in $Browsers) { Write-Host '  Brave:   open brave://extensions' }
+    Write-Host '  Then: enable Developer mode'
+    Write-Host "        Load unpacked -> select:  $RepoDir\extension"
+    Write-Host '        Reload your Teams tab (https://teams.cloud.microsoft/)'
+    Write-Host ''
+}
+
+if ('firefox' -in $Browsers) {
+    Write-Host "`n=== Firefox — build + sign (free, ~5 min) ===`n" -ForegroundColor Cyan
+    $distDir = Join-Path $RepoDir 'dist'
+    $zipPath = Join-Path $distDir 'teams-slack-sync-firefox.zip'
+    try {
+        New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+        # AMO wants manifest.json at the zip ROOT, so zip the folder contents.
+        Compress-Archive -Path (Join-Path $RepoDir 'extension\*') -DestinationPath $zipPath -Force
+        Ok "Built $zipPath"
+    } catch {
+        Warn "Couldn't build the zip automatically: $($_.Exception.Message)"
+    }
+    Write-Host '  1. https://addons.mozilla.org/developers/ -> Submit a New Add-on'
+    Write-Host "     -> 'On your own' (unlisted) -> upload dist\teams-slack-sync-firefox.zip"
+    Write-Host '  2. Download the signed .xpi (~1-5 min) -> drag it into Firefox -> Add'
+    Write-Host '  3. about:addons -> the extension -> Permissions -> allow localhost access'
+    Write-Host '  4. Reload your Teams tab'
+    Write-Host '  (Quick test without signing: about:debugging -> Load Temporary Add-on)'
+    Write-Host ''
+}
+
 Write-Host "Test: join a 'Meet now' meeting — your Slack status should flip to"
 Write-Host "'In a Teams call' within ~20s, and clear when you leave."
 Write-Host ''
@@ -140,4 +211,6 @@ Write-Host 'Manage the background service:'
 Write-Host "  Stop-ScheduledTask  -TaskName $TaskName   # stop"
 Write-Host "  Start-ScheduledTask -TaskName $TaskName   # start"
 Write-Host "  Get-Content -Wait $LogDir\server.log      # watch logs"
+Write-Host ''
+Write-Host 'Change these choices anytime by re-running .\setup.ps1'
 Write-Host ''

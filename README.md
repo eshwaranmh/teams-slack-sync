@@ -64,10 +64,20 @@ cd teams-slack-sync
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-The installer prompts for your token (hidden input, validated against Slack),
-installs a background service (launchd on macOS, Scheduled Task on Windows),
-and starts the server. **The server starts automatically on every
-login/reboot and restarts itself if it crashes.**
+The installer walks you through everything interactively:
+
+1. **Slack token** — prompted with hidden input and validated live against Slack
+2. **Where you use Teams** — desktop app, browser, or both (configures the server accordingly)
+3. **Which browser(s)** — Chrome, Edge, Brave, Firefox, Safari (macOS) — and then
+   shows only the steps for what you picked (and builds the Firefox zip /
+   Safari project for you where possible)
+
+It then installs a background service (launchd on macOS, Scheduled Task on
+Windows) and starts the server. **The server starts automatically on every
+login/reboot and restarts itself if it crashes.** Re-run the installer anytime
+to change your choices; your saved token and settings are kept.
+
+The sections below double as the full per-client reference.
 
 ### 3a. Teams DESKTOP app
 

@@ -5,9 +5,11 @@
 #   1. Checks Node.js >= 22
 #   2. Asks for your Slack user token (input hidden, validated live)
 #   3. Saves it to ~/.teams-slack-sync.env (chmod 600)
-#   4. Installs a launchd agent so the server starts on every login/reboot
+#   4. Asks where you use Teams (desktop app / browser / both) and which
+#      browser(s), then tailors the remaining steps to your answers
+#   5. Installs a launchd agent so the server starts on every login/reboot
 #      and restarts automatically if it crashes
-#   5. Verifies the server is up
+#   6. Verifies the server is up
 #
 # Usage:  cd teams-slack-sync && ./setup.sh
 
@@ -80,7 +82,54 @@ if (( NEED_TOKEN )); then
   ok "Token saved to $ENV_FILE (owner-read-only)"
 fi
 
-# --- 3. launchd agent (auto-start on login/reboot) ---------------------------
+# --- 3. Where do you use Teams? -----------------------------------------------
+print ""
+bold "Where do you use Microsoft Teams?"
+print "  1) Both — desktop app AND in a browser (recommended)"
+print "  2) Browser (web) only"
+print "  3) Desktop app only"
+read "MODE_CHOICE?Choose [1-3, default 1]: "
+case "$MODE_CHOICE" in
+  2) MODE=web ;;
+  3) MODE=desktop ;;
+  *) MODE=both ;;
+esac
+
+# Persist the choice, preserving the token and any other customizations.
+DESKTOP_ENABLED=true
+[[ "$MODE" == "web" ]] && DESKTOP_ENABLED=false
+grep -v '^export TEAMS_DESKTOP_ENABLED=' "$ENV_FILE" > "$ENV_FILE.tmp" || true
+mv "$ENV_FILE.tmp" "$ENV_FILE"
+print "export TEAMS_DESKTOP_ENABLED=$DESKTOP_ENABLED" >> "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+ok "Mode: $MODE (saved to $ENV_FILE)"
+
+# --- 4. Which browser(s)? ------------------------------------------------------
+typeset -a BROWSERS
+BROWSERS=()
+if [[ "$MODE" != "desktop" ]]; then
+  print ""
+  bold "Which browser(s) do you use Teams in?"
+  print "  1) Chrome   2) Edge   3) Brave   4) Firefox   5) Safari"
+  read "BR_CHOICE?Select one or more, comma-separated [default 1]: "
+  BR_CHOICE="${BR_CHOICE:-1}"
+  for n in ${(s:,:)BR_CHOICE}; do
+    case "${n// /}" in
+      1) BROWSERS+=(chrome) ;;
+      2) BROWSERS+=(edge) ;;
+      3) BROWSERS+=(brave) ;;
+      4) BROWSERS+=(firefox) ;;
+      5) BROWSERS+=(safari) ;;
+      *) warn "Ignoring unknown choice: $n" ;;
+    esac
+  done
+  (( ${#BROWSERS} )) || BROWSERS=(chrome)
+  ok "Browser(s): ${(j:, :)BROWSERS}"
+fi
+
+has_browser() { (( ${BROWSERS[(Ie)$1]} )); }
+
+# --- 5. launchd agent (auto-start on login/reboot) ---------------------------
 mkdir -p "$HOME/Library/LaunchAgents"
 
 cat > "$PLIST" <<PLIST_EOF
@@ -109,7 +158,7 @@ launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
 ok "launchd agent installed — server now starts on every login/reboot"
 
-# --- 4. Verify ----------------------------------------------------------------
+# --- 6. Verify ----------------------------------------------------------------
 print -n "Waiting for server..."
 for i in {1..10}; do
   sleep 1
@@ -126,20 +175,59 @@ for i in {1..10}; do
   fi
 done
 
-# --- 5. Next steps -------------------------------------------------------------
-bold "\n=== Almost done — connect your Teams client(s) ===\n"
-print "Teams DESKTOP app (standalone Teams):"
-print "  1. Teams → Settings → Privacy → Third-party app API → Manage API → enable"
-print "  2. Join any meeting (Calendar → Meet now is fine)"
-print "  3. Approve the 'TeamsSlackSync wants to connect' prompt in Teams (one time)"
-print ""
-print "Teams in a BROWSER (Chrome / Edge / Brave):"
-print "  1. Open chrome://extensions (or edge://extensions, brave://extensions)"
-print "  2. Enable Developer mode (top-right)"
-print "  3. Load unpacked → select:  $REPO_DIR/extension"
-print "  4. Reload your Teams tab (https://teams.cloud.microsoft/)"
-print "  (Firefox and Safari: see README for their install steps.)"
-print ""
+# --- 7. Next steps (tailored to your answers) -----------------------------------
+if [[ "$MODE" != "web" ]]; then
+  bold "\n=== Teams DESKTOP app — one-time pairing ===\n"
+  print "  1. Teams → Settings → Privacy → Third-party app API → Manage API → enable"
+  print "  2. Join any meeting (Calendar → Meet now is fine)"
+  print "  3. Approve the 'TeamsSlackSync wants to connect' prompt in Teams (one time)"
+  print ""
+fi
+
+if has_browser chrome || has_browser edge || has_browser brave; then
+  bold "\n=== Load the extension (Chromium browsers) ===\n"
+  has_browser chrome && print "  Chrome:  open chrome://extensions"
+  has_browser edge   && print "  Edge:    open edge://extensions"
+  has_browser brave  && print "  Brave:   open brave://extensions"
+  print "  Then: enable Developer mode (top-right)"
+  print "        Load unpacked → select:  $REPO_DIR/extension"
+  print "        Reload your Teams tab (https://teams.cloud.microsoft/)"
+  print ""
+fi
+
+if has_browser firefox; then
+  bold "\n=== Firefox — build + sign (free, ~5 min) ===\n"
+  if "$REPO_DIR/package-firefox.sh" >/dev/null 2>&1; then
+    ok "Built dist/teams-slack-sync-firefox.zip"
+  else
+    warn "Couldn't build the zip automatically — run ./package-firefox.sh manually"
+  fi
+  print "  1. https://addons.mozilla.org/developers/ → Submit a New Add-on"
+  print "     → 'On your own' (unlisted) → upload dist/teams-slack-sync-firefox.zip"
+  print "  2. Download the signed .xpi (~1-5 min) → drag it into Firefox → Add"
+  print "  3. about:addons → the extension → Permissions → allow localhost access"
+  print "  4. Reload your Teams tab"
+  print "  (Quick test without signing: about:debugging → Load Temporary Add-on)"
+  print ""
+fi
+
+if has_browser safari; then
+  bold "\n=== Safari — build the wrapper app (needs Xcode) ===\n"
+  if xcrun --find safari-web-extension-converter >/dev/null 2>&1; then
+    read "SAFARI_NOW?Generate the Safari Xcode project now? [y/N] "
+    if [[ "$SAFARI_NOW" == [yY]* ]]; then
+      "$REPO_DIR/package-safari.sh"
+    else
+      print "  Later: run ./package-safari.sh"
+    fi
+  else
+    warn "Xcode not found — install it from the App Store, then run ./package-safari.sh"
+  fi
+  print "  Then: Xcode → Run (⌘R) once → Safari → Develop → Developer Settings →"
+  print "        Allow unsigned extensions → Settings → Extensions → enable it"
+  print ""
+fi
+
 print "Test: join a 'Meet now' meeting — your Slack status should flip to"
 print "'In a Teams call' within ~20s, and clear when you leave."
 print ""
@@ -147,4 +235,6 @@ print "Manage the background service:"
 print "  launchctl unload $PLIST   # stop"
 print "  launchctl load $PLIST     # start"
 print "  tail -f /tmp/teams-slack-sync.log         # watch logs"
+print ""
+print "Change these choices anytime by re-running ./setup.sh"
 print ""
