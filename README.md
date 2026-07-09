@@ -50,30 +50,6 @@ v1.1.0 source download.
 
 ---
 
-## Versions
-
-Two versions are available for download on the
-[Releases page](https://github.com/eshwaranmh/teams-slack-sync/releases) —
-pick one, download its source zip, and run the installer:
-
-| | **Version 1** ([v1.1.0](https://github.com/eshwaranmh/teams-slack-sync/releases/tag/v1.1.0)) | **Version 2** ([v2.0.0](https://github.com/eshwaranmh/teams-slack-sync/releases/tag/v2.0.0), latest) |
-|---|---|---|
-| Teams **web** (browser) | Chrome, Edge | Chrome, Edge, Brave, Firefox, Safari |
-| Teams **desktop app** | — | ✅ via Teams' local third-party app API |
-| Operating systems | macOS | macOS + Windows |
-| Installer | `./setup.sh` | Interactive `./setup.sh` (macOS) / `setup.ps1` (Windows) — asks where you use Teams and which browser(s) |
-| Node.js required | 18+ | 22+ |
-| npm dependencies | none | none |
-
-Version 2 is a superset of Version 1 — everything v1 did still works the same
-way. Choose v1 only if you want the smallest possible footprint (web-only,
-Chrome/Edge, macOS) or can't upgrade Node past 18.
-
-**This README documents Version 1.** For v2's docs, see the README inside the
-v2.0.0 source download (or the Enhancement branch / PR #1).
-
----
-
 ## Setup (≈5 minutes per person)
 
 ### 1. Get a Slack user token
